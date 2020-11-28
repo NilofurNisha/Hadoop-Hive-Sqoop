@@ -1,0 +1,97 @@
+Hive UDF functions
+===================
+
+1.Masking Age and profession column
+
+*create table customerall(custno string, firstname string, lastname string, age int,profession string) row format delimited fields terminated by ',';
+load data local inpath '/home/hduser/hive/data/custs' into table customerall;
+
+
+*create below python udf:
+vi /home/hduser/mask.py
+code:
+#!/usr/bin/env python
+import sys
+import string
+import hashlib
+while True:
+      line = sys.stdin.readline()
+      if not line:
+             break
+      line = string.strip(line, "\n ")
+      custno, firstname, lastname, age, profession = string.split(line, "\t")
+      print "\t".join([custno, firstname,lastname,hashlib.sha256(age).hexdigest(),
+      hashlib.md5(profession).hexdigest()])
+
+*In Hive,
+*Add the file -> add FILE /home/hduser/mask.py;
+*Use UDF function on table data using -> select transform(custno,firstname,lastname,age,profession) using 'python /home/hduser/mask.py' as(custno,firstname,lastname,age,profession) from customerall limit 10;
+
+2.To find seasons
+create py file - vi /home/hduser/seasons.py
+code:
+import sys
+import string
+while True:
+      line = sys.stdin.readline()
+      if not line:
+              break
+      line = str.strip(line,"\n")
+      txnno,txndate,custno,amount,category,product,city,state,spendby = str.split(line, "\t")
+      print(line)
+      date = txndate.split("-")
+      temp = date[0]
+
+      for strmonth in temp:
+          month = (int)(strmonth.strip())
+          if(month == 1 or month == 2 or month == 12):
+               print "Winter"
+          elif(month == 3 or month == 4 or month == 5):
+               print "Spring"
+          elif(month == 6 or month == 7 or month == 8):
+               print "Summer"
+          elif(month == 9 or month == 10 or month == 11):
+               print "Fall"
+          else:
+               print "Invalid"
+
+select transform(txnno) using 'python /home/hduser/seasons.py' as(txnno) from txnrecords limit 10;
+
+
+3.To change date format on date column (MM-DD-YYYY to YYYY-MM-DD)
+while True:
+       line = fo.readline()
+       if not line:
+              break
+       line = str.strip(line,"\n")
+       txnno,txndate,custno,amount,category,product,city,state,spendby = str.split(line, "\t")
+       print(line)
+       def date_format(txndate):
+               date = txndate.split("-")
+               temp = date[0]
+               date[0] = date[-1]
+               date[-1] = temp
+               temp1 = date[1]
+               date[1] = date[-1]
+               date[-1] = temp1
+               final = "-".join(date)
+               return final
+       result = date_format(txndate)
+       print(result)
+
+
+Temporary Function:
+=======================
+
+create temporary function functioname AS classname using jar 'jar path';
+select functioname(colname) from tablename:
+
+
+Example:
+create temporary function changedtformat as 'com.udf.changedtformat' using JAR '/home/hduser/date.jar'
+(export pycode as jar)
+
+select changedtformat(txndate) from txnrecords
+
+
+
