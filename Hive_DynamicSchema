@@ -1,0 +1,28 @@
+Hive Schema Evolution (Hive Dynamic schema):
+
+1.Import the Customer data into hdfs using sqoop import with 3 mappers into /user/hduser/custavro location
+sqoop import -Dmapreduce.job.user.classpath.first=true --connect jdbc:mysql://localhost/custpayments --username root --password root -table customers -m 3 --split-by customernumber --target-dir /user/hduser/custavro --delete-target-dir --as-avrodatafile;
+
+
+
+2.Download and copy to /home/hduser/ the avro jar (avro-tools-1.8.1.jar) from the below url to extract the schema from the avro data imported in the above step.
+http://central.maven.org/maven2/org/apache/avro/avro-tools/1.8.1/
+
+3.Copy the customer.avsc (avro schema file extracted from the above step into /user/hduser/custavroschema location.
+hadoop jar avro-tools-1.8.1.jar getschema /user/hduser/custavro/part-m-00000.avro > /home/hduser/customer.avsc
+cat ~/customer.avsc
+hadoop fs -put -f customer.avsc /tmp/customer.avsc
+
+
+
+4.create hive avro table using avro schema file
+create external table customeravro stored as AVRO location '/user/hduser/custavro' TBLPROPERTIES('avro.schema.url'='hdfs:///tmp/customer.avsc');
+
+
+
+
+
+
+
+
+
