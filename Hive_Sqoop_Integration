@@ -1,0 +1,17 @@
+========================
+Hive Sqoop Integeration
+========================
+*Create a hive table using sqoop as like mysql table
+
+sqoop create-hive-table --connect jdbc:mysql://127.0.0.1/test --username hiveuser --password
+hivepassword --table customer --hive-table retail.customer;
+
+
+Import data from sqoop directly to hive customer table
+-------------------------------------------------------------------------
+*Create directory in hadoop
+hadoop fs -rmr /user/hduser/customer
+
+sqoop import --connect jdbc:mysql://127.0.0.1/test --username hiveuser –password hivepassword --table
+customer --hive-import -hive-table retail.customer_data -m 1
+
