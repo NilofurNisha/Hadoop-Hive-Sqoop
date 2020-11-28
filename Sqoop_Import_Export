@@ -1,0 +1,97 @@
+Source Data readiness:
+======================
+                                        Create the below Tables MYSQL for Import
+                                        -----------------------------------------
+Create database custdb;
+use custdb;
+
+CREATE TABLE customers (custid INT,firstname VARCHAR(20),lastname VARCHAR(20),city varchar(50),age
+int,createdt date );
+
+CREATE TABLE customer_details (custid INT,firstname VARCHAR(20),fulladdress VARCHAR(200),category
+varchar(50),transactiondt date,transactamt int,createdt date);
+
+ALTER TABLE customers ADD PRIMARY KEY(custid);
+
+*Loading data into tables
+insert into customers values(1,'karthik','vijay','chennai',5,'2018-02-01');
+insert into customers values(2,'arun','kumar','chennai',25,'2018-01-30');
+insert into customers values(3,'vishwa','ajit','hyderabad',null,'2018-02-03');
+insert into customers values(4,'bala','palani','bangalore',30,'2018-02-02');
+
+insert into customer_details values(1,'karthik','3/2, jeyaram street, chrompet,Chennai','household','2018-02-
+01',4000,'2018-02-01');
+insert into customer_details values(1,'karthik','3/2, jeyaram street, chrompet,Chennai 44','Automobile','2018-
+02-02',6000,'2018-02-02');
+insert into customer_details values(1,'karthik','3/2, jeyaram street, chrompet,Chennai 44','Foods','2018-02-
+02',3000,'2018-02-02');
+insert into customer_details values(1,'karthik','3/2, jeyaram street, chrompet,Chennai 44',null,'2018-02-
+02',1000,'2018-02-03');
+insert into customer_details values(2,'arun','11, palayam blvd, broadway,Chennai 01','tools','2018-02-
+02',11000,'2018-02-03');
+insert into customer_details values(2,'arun','11, palayam blvd, broadway,Chennai 01','electronics','2018-02-
+02',15000,'2018-02-04');
+insert into customer_details values(3,'vishwa','1A, Elango nagar, Vadapalani,Chennai 33','clothes','2018-02-
+02',15000,'2018-02-04');
+
+*Join query to join above two tables on customer id column
+Select a.custid master_custid,a.firstname,b.custid detail_custid,a.createdt,a.age,category,transactamt from customers a join customer_details b on a.custid=b.custid;
+
+
+                                         Create the below tables for Export
+                                         -----------------------------------
+
+CREATE TABLE customer_stage (custid INT,fullname VARCHAR(40), city varchar(50),age int,createdt date );
+CREATE TABLE customer_exp (custid INT,fullname VARCHAR(40),city varchar(50),age int,createdt date );
+ALTER TABLE customer_exp ADD PRIMARY KEY(custid);
+
+
+Import Use Case:
+===============
+
+1. Import all columns of customer and customer_details data by joining custid between the 2 tables.
+customer_details can have columns as given.
+2. Both custid should be named as master_custid and detail_custid from customer and customer_details
+respectively.
+3. Use column boundary queries using customer.custid column, split using custid
+4. Insert null values in category column and age columns import as NA and age a 0 respectively in the hdfs.
+5. Store the output in cust_details hdfs directory.
+6. Compress the imported data.
+7. Use direct mode to transfer the entire content.
+8. Define number of mappers as 3.
+9. Use fetch size 100.
+10. Once the sqoop is executed view the content in hdfs using the command:
+hadoop fs -text cust_details/part-m-0000*.gz
+
+
+
+Import Solution Command:
+===============================
+sqoop import --connect jdbc:mysql://localhost/custdb --username root -P --boundary-query "select min(custid),
+max(custid) from customers" --query 'Select a.custid master_custid,a.firstname,a.age,a.city,b.custid
+detail_custid,a.createdt,b.fulladdress,category,transactiondt,transactamt from customers a join
+customer_details b on a.custid=b.custid WHERE $CONDITIONS' --split-by a.custid --target-dir cust_details --null-
+non-string '0' --null-string 'NA' --compress --direct --num-mappers 3 --fetch-size 100 --delete-target-dir;
+
+
+
+
+
+
+Export Use Case:
+================
+1. Import only the subset of columns from the customer table to the HDFS (custid, concatenation of firstname and lastname,age).
+2. Export only subset of the above imported columns to the customer_exp table specifying only these 3 columns.
+3. Use batch mode for fast export with the sqoop.export.records.per.statement=5.
+4. Use staging table to provide consistent load with the clear staging table option to clean the table before each load.
+
+Export Solution Command:
+===========================
+sqoop import --connect jdbc:mysql://localhost/custdb --username root --password root --query " select
+custid,concat(firstname,' ',lastname),age from customers where \$CONDITIONS " --target-dir cust_exp --
+delete-target-dir -m 1;
+
+sqoop export -Dsqoop.export.records.per.statement=5 --connect jdbc:mysql://localhost/custdb --username root
+--password root --table customer_exp --export-dir cust_exp --batch --staging-table customer_stage --clear-
+staging-table --columns custid,fullname,age
+
