@@ -1,0 +1,92 @@
+Slowly Changing Dimension implementation in Hive invoking data using Sqoop:
+
+A Slowly Changing Dimension (SCD) is a dimension that stores and manages both current and historical data over time in a data warehouse. It is considered and implemented as one of the most critical ETL tasks in tracking the history of dimension records.
+
+
+Source Data readiness:
+=====================================
+*In Mysql
+1.Login to mysql and create database
+
+create database stock;
+
+use stock;
+
+2.create table and insert data 
+create table stockexchange(id integer,exchang varchar(100),company varchar(100),dt date,value float(10,3));
+
+insert into stock.stockexchange values(1,'NYSE','CLI','2019-01-01',35.39),(2,'NYSE','WAG','2019-01-01',24.39),(3,'NYSE','WMT','2019-01-01',145.31),(4,'NYSE','INT','2019-01-01',288.19);
+
+
+
+*In Hive
+3.Import data into hive (Managed table)
+sqoop import --connect jdbc:mysql://localhost/stock --username root --password root --query "select id,exchang,company,value from stockexchange where dt>='2019-01-01' and \$CONDITIONS" --hive-import --hive-overwrite --hive-table stock.managed_stockexchange -m 1 --fields-terminated-by ',' --target-dir /user/hduser/stockexchange
+
+4.Create database and external table
+create database stock;
+use stock;
+
+drop table ext_stockexchange;
+
+create table stock.ext_stockexchange (id int,ver int,exchang string,company string,value double) row format delimited fields terminated by ',' location '/user/hduser/stockexchangedata';
+
+
+Type 1 SCDs - Overwriting(History is not maintained - older version is replaced by new)
+==============================================
+*In Hive(Loading data into external table from managed table)
+
+insert into table ext_stockexchange select * from ext_stockexchange where id not in (select id from managed_stockexchange) union select id,1,exchang,company,value from stock.managed_stockexchange;
+
+
+*In mysql(Inserting new data to stock table and importing updated data into hive managed table)
+
+insert into stock.stockexchange values(3,'NYSE','WMT','2019-01-03',147.51),(4,'NYSE','INT','2019-01-04',283.77);
+
+sqoop import --connect jdbc:mysql://localhost/stock --username root --password root --query "select id,exchang,company,value from stockexchange where dt>='2019-01-02' and \$CONDITIONS" --hive-import --hive-overwrite --hive-table stock.managed_stockexchange -m 1 --fields-terminated-by ',' --target-dir /user/hduser/stockexchange
+
+
+*In Hive
+(left outer join two tables - returns all rows in external table but not in managed table as it is updated with latest data only)
+select a.* from ext_stockexchange a left outer join managed_stockexchange b on a.id =b.id where b.id is null union select id,1,exchang,company,value from stock.managed_stockexchange;
+
+
+(Loading updated data into external data by replacing older value with new value)
+insert overwrite table ext_stockexchange select * from ext_stockexchange where id not in (select id from managed_stockexchange) union select id,1,exchang,company,value from stock.managed_stockexchange;
+
+
+
+Type 2 SCDs - Creating another dimension record( History is maintained -maintains older & newer versions)
+=========================================================================================================
+
+*In Mysql(add new records)
+insert into stock.stockexchange values(3,'NYSE','WMT','2019-01-04',157.81),(5,'NYSE','INT','2019-01-04',83.77);
+
+*Import into hive managed table
+sqoop import --connect jdbc:mysql://localhost/stock --username root --password root --query "select id,exchang,company,value from stockexchange where dt>='2019-01-03' and \$CONDITIONS" --hive-import --hive-overwrite --hive-table stock.managed_stockexchange -m 1 --fields-terminated-by ',' --target-dir /user/hduser/stockexchange
+
+*Loading updated data into hive external table
+Hive:
+
+insert overwrite table ext_stockexchange
+
+select a.id,coalesce(b.ver1+row_number() over(partition by a.id),row_number() over(partition by a.id)) as ver,a.exchang,a.company,a.value from managed_stockexchange a
+
+left outer join (select id,max(ver) as ver1 from ext_stockexchange group by id) as b on a.id=b.id
+
+union
+
+select id,ver,exchang,company,value from ext_stockexchange;
+
+*Note:
+1.This left outer join will give versions for the data ,if data already exists then it adds one to ver1 (eg: ver is 1 then ver1 is 2)otherwise if it is a new data the ver1 is updated as 1
+2.Union - This will join the latest data with the existing data in ext_stockexchange table
+
+By this way , history of data is maintained in versions here.
+
+
+
+
+
+
+
