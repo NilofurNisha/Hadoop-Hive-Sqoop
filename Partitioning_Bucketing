@@ -1,0 +1,134 @@
+                                                                                Partition
+
+
+Partitioning can be done in one of the following two ways:
+1. Static partitioning
+2. Dynamic partitioning
+
+
+   *Static Partitioning
+    ===================
+Create partitioned table:
+
+[In Linux terminal]
+cp /home/hduser/hive/data/txns /home/hduser/hive/data/txns_20181212_PADE
+cp /home/hduser/hive/data/txns /home/hduser/hive/data/txns_20181212_NY
+
+Static Partition Load in managed table(2 ways):
+1.Load command method
+
+*Create partitioned table
+create table txnrecsbycatdtreg (txnno INT, txndate STRING, custno INT, amount DOUBLE, category STRING,product STRING, city STRING, state STRING, spendby STRING) partitioned by (datadt date,region string) row format delimited fields terminated by ',' stored as textfile;
+
+
+*Loading data into table
+LOAD DATA LOCAL INPATH '/home/hduser/hive/data/txns_20181212_PADE' OVERWRITE INTO TABLE txnrecsbycatdtreg PARTITION (datadt='2018-12-12',region='PADE');
+
+LOAD DATA LOCAL INPATH '/home/hduser/hive/data/txns_20181212_NY' OVERWRITE INTO TABLE txnrecsbycatdtreg PARTITION (datadt='2018-12-12',region='NY');
+
+
+*List partitoned folders in HDFS
+dfs -ls /user/hive/warehouse/retail.db/txnrecsbycatdtreg/datadt=2016-12-12/region=PADE;
+
+*Fetching data from table
+select count(1) from txnrecsbycatdtreg where datadt='2016-12-12' and region in ( 'PADE', 'NY');
+
+*List the partitions in a table
+show partitions txnrecsbycatdtreg partition(datadt='2018-12-12');
+
+
+
+2.Insert select method
+
+Note: As we are deriving the partition column from one of the column (category) from the file data, we
+need to ignore that column from the create table column list.
+
+
+*Create table
+create table managedtxnrecsByCat(txnno INT, txndate STRING, custno INT, amount DOUBLE, product STRING, city STRING, state STRING, spendby STRING)partitioned by (category STRING) row format delimited fields terminated by ',' stored as textfile;
+
+*Load data into table
+Insert into table managedtxnrecsbycat partition (category='Games') select txnno,txndate,custno,amount,product,city,state,spendby from txnrecords where category='Games';
+
+
+
+    *Dynamic Partitioning
+     ====================
+*Create external table with partition
+--------------------------------------
+create external table txnrecsByCat(txnno INT, txndate STRING, custno INT, amount DOUBLE, product STRING, city STRING, state STRING, spendby STRING) partitioned by (category STRING) row format delimited fields terminated by ',' stored as textfile location '/user/hduser/hiveexternaldata';
+
+hadoop fs -mkdir -p /user/hduser/hiveexternaldata;(create directory in HDFS)
+
+
+*Load data into dynamic partition table
+     1.Dynamic partitions can be only loaded using insert select.
+     2.Set the below environmental variables
+       set hive.exec.dynamic.partition.mode=nonstrict;
+
+Insert into table txnrecsbycat partition (category) select txnno,txndate,custno,amount, product,city,state,spendby,category from txnrecords;
+
+   *Additional Partition Options
+    ============================
+ALTER TABLE table_name ADD [IF NOT EXISTS] PARTITION partition_spec [LOCATION 'loc1'] partition_spec
+[LOCATION 'loc2'] ...;
+
+Where partition_spec:
+: (partition_column = partition_column_value, partition_column = partition_column_value, ...)
+
+
+[In Linux terminal]
+cp /home/hduser/hive/data/txns /home/hduser/hive/data/txns_20181215_PADE
+
+hadoop fs -mkdir -p /user/hive/warehouse/retail.db/txnrecsbycatdtreg/datadt=2018-12-15/region=PADE/
+
+hadoop fs -put /home/hduser/hive/data/txns_20181215_PADE /user/hive/warehouse/retail.db/txnrecsbycatdtreg/datadt=2018-12-15/region=PADE/
+
+[Hive Cli]
+alter table txnrecsbycatdtreg add if not exists partition (datadt='2018-12-15',region='PADE') location '/user/hive/warehouse/retail.db/txnrecsbycatdtreg/datadt=2018-12-15 region=PADE/';
+
+show partitions txnrecsbycatdtreg partition(datadt='2018-12-15');
+
+    *Renaming partitions
+     ===================
+*The following command can be used to rename a partition:
+ALTER TABLE table_name PARTITION partition_spec RENAME TO PARTITION partition_spec;
+alter table txnrecsbycatdtreg partition (datadt='2018-12-15',region='PADE') rename to partition (datadt='2018-12-14',region=’NJ');
+
+
+    *Drop Partitions
+     ================
+ALTER TABLE myTable DROP PARTITION partition_spec, PARTITION partition_spec;
+ALTER TABLE txnrecsbycatdtreg drop partition (datadt='2018-12-12');
+
+
+======================================================================================================================================================================
+                                                                 Bucketing
+
+Bucket number = hash_function(bucketing_column) mod num_buckets
+
+
+
+Create bucketed table over the partitioned table
+------------------------------------------------
+
+Use the following command set hive.enforce.bucketing = true; allows the correct number of reducers and the cluster by column to be automatically selected based on the table.
+set hive.enforce.bucketing = true ;
+
+create table buckettxnrecsByCat(txnno INT, txndate STRING, custno INT, amount DOUBLE, product STRING, city STRING, state STRING, spendby STRING) partitioned by (category STRING) clustered by (state) sorted by (city) INTO 10 buckets row format delimited fields terminated by ',' stored as textfile location '/user/hduser/hiveexternaldata/bucketout';
+
+
+Load data into table
+---------------------
+Insert into table buckettxnrecsByCat partition (category) select txnno,txndate,custno,amount,product,city,state,spendby,category from txnrecords;
+
+
+Fetch data from table
+---------------------
+select count(1) from buckettxnrecsByCat where category='Games' and state='Baltimore';
+
+
+Sampling
+---------
+SELECT txnno,product,state FROM buckettxnrecsByCat TABLESAMPLE (BUCKET 3 OUT OF 10);
+SELECT txnno,product,state FROM buckettxnrecsByCat TABLESAMPLE (0.1percent);
