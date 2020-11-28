@@ -1,0 +1,11 @@
+Hadoop Service:
+start-all.sh
+
+Mysql service:(metastore for Hive)
+sudo service mysqld start
+
+Hive Metastore:
+hive --service metastore &
+
+Hive Cli:
+hive
