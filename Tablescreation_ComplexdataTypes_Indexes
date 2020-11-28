@@ -1,0 +1,84 @@
+Creating managed tables:
+========================
+
+create table txnrecords(txnno INT, txndate STRING, custno INT, amount DOUBLE, category STRING, product STRING, city STRING, state STRING, spendby STRING) row format delimited fields terminated by ',' lines terminated by '\n' stored as textfile;
+
+*Load the data into the table [ From Linux client]
+LOAD DATA LOCAL INPATH '/home/hduser/hive/data/txns' INTO TABLE txnrecords;
+LOAD DATA LOCAL INPATH '/home/hduser/hive/data/txns' OVERWRITE INTO TABLE txnrecords;
+
+
+*Load the data into table from HDFS
+LOAD DATA INPATH '/user/hduser/txns1' OVERWRITE INTO TABLE txnrecords;
+
+Creating External tables:
+==========================
+
+create external table externaltxnrecords (txnno INT, txndate STRING, custno INT, amount DOUBLE, category STRING, product STRING, city STRING, state STRING, spendby STRING) row format delimited fields terminated by ',' stored as textfile location '/user/hduser/hiveexternaldata';
+
+
+
+Complex data types: 
+=======================
+  *Array Example
+   =============
+create table arraytbl (id int,name string,sal bigint,desig array<string>,city string) row format delimited fields terminated by ',' collection items terminated by '$';
+
+load data local inpath '/home/hduser/hive/data/arraydata' overwrite into table arraytbl;
+
+select name,desig[2],sal from arraytbl;
+
+
+Data:
+1,Arvindh,40000,SWE$Analyst$SAnalyst$PL,hyd
+2,Bala,30000,SWE$Analyst$SAnalyst$PM,hyd
+3,Chandra,50000,SWE$Analyst$PL$PM,Che
+4,Gokul,30000,SWE$Analyst$SAnalyst,hyd
+
+
+
+   *Map Example
+    ===========
+create table map1 (id int,name string,sal bigint,Mark map<string,int>,city string) row format delimited fields terminated by ',' collection items terminated by '$' map keys terminated by '#';
+
+load data local inpath '/home/hduser/hive/data/map1' overwrite into table map1;
+
+Select Mark["mat"] from map1;
+
+Data:
+1,Arvindh,40000,mat#100$Eng#99,hyd
+2,Bala,30000,Sci#100$Eng#99,chn
+
+
+
+   *Struct Example
+    ==============
+create table Struct(id int,name string,sal bigint,addr struct<city:string,state:string,pin:bigint>) row format delimited fields terminated by ',' collection items terminated by '$';
+
+load data local inpath '/home/hduser/hive/data/struct' overwrite into table Struct;
+
+select addr.city from struct;
+
+
+Data:
+1,Arvindh,40000,Hyderabad$AP$800042
+2 ,Bala,30000,Chennai$TamilNadu$ 600042
+load data local inpath '/home/hduser/hive/data/struct' overwrite into table Struct;
+select addr.city from struct;
+
+
+
+
+Exploring Indexes
+=================
+*create an index
+create index idx_custno on table txnrecords(custno) AS 'org.apache.hadoop.hive.ql.index.compact.CompactIndexHandler' WITH DEFERRED REBUILD;
+
+*Loading into indexed table
+ALTER INDEX idx_custno ON txnrecords REBUILD;
+
+*Show index
+SHOW FORMATTED INDEX ON txnrecords;
+
+*Drop index
+DROP INDEX idx_custno ON txnrecords;
