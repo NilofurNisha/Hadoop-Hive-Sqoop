@@ -7,27 +7,27 @@ Table should be
 
 
 Properties to be set in hive cli:
-set hive.enforce.bucketing=true;
-set hive.exec.dynamic.partition.mode=nonstrict;
-set hive.enforce.sorting=true;
+1.set hive.enforce.bucketing=true;
+2.set hive.exec.dynamic.partition.mode=nonstrict;
+3.set hive.enforce.sorting=true;
 
 
-create ORC table:
+*create ORC table:
 create table trans_orc(txnno INT, txndate STRING, custno INT, amount DOUBLE,category STRING,product STRING, city STRING,spendby STRING)partitioned by(state STRING) clustered by (txnno) sorted by (city) into 3 buckets row format delimited fields terminated by ',' stored as orc tblproperties('transactional'='true');
 
 
-create staging table:
+*create staging table:
 create table trans_stg(txnno INT, txndate STRING, custno INT, amount DOUBLE,category STRING,product STRING, city STRING,state String,spendby STRING) row format delimited fields terminated by ',' stored as orc tblproperties('transactional'='true');
 
 
-Load data into staging table:
+*Load data into staging table:
 Load data local inpath '/home/hduser/hive/data/txns' into table trans_stg;
 
-Load data into final ORC table from staging table:
+*Load data into final ORC table from staging table:
 insert into table trans_orc partition(state) select txnno,txndate,custno,amount,category,product,city,spendby,state from trans_stg limit 10;
 
 
-Update data in ORC table:
+*Update data in ORC table:
 update trans_orc set spendby='cash-paid' where spendby='cash';
 
 
